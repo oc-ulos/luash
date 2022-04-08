@@ -4,12 +4,16 @@
 -- Changes:
 --  - Combine the metatables for _G and sh, and don't set it on _G,
 --    so e.g. sh.ls() works
---  - Use some Cynosure 2 syscalls (to be superseded by luaposix eventually)
+--  - Use some Cynosure 2 syscalls (to be mostly superseded by luaposix
+--    eventually)
 --  - Add sh.resolve() to search $PATH for a command
 --  - Add sh.split() to split a command into tokens
 --  - Add sh.expand() to perform glob expansion
+--  - Don't use io.popen()
 
 local sys = require("sys")
+local errno = require("posix.errno").errno
+local stdio = require("posix.stdio")
 local dirent = require("posix.dirent")
 
 local M = {}
@@ -53,32 +57,51 @@ local function flatten(t)
 	return result
 end
 
+local function pread(cmd, inp)
+  local pid, err
+  local infd, outfd = sys.pipe()
+
+  if inp then
+    local inst, oust = sys.pipe()
+
+    pid, err = sys.fork(function()
+      io.stdout(stdio.fdopen(outfd))
+      sys.execve(cmd[1], table.pack(table.unpack(cmd, 2)))
+    end)
+
+    sys.write(oust, inp)
+  else
+    pid, err = sys.fork(function()
+      io.stdout(stdio.fdopen(outfd))
+      sys.execve(cmd[1], table.pack(table.unpack(cmd, 2)))
+    end)
+  end
+
+  if not pid then
+    error(errno(err))
+  end
+
+  local exit, status = sys.wait(pid)
+
+  local output = sys.read(infd, "a")
+  return output, exit, status
+end
+
 -- returns a function that executes the command with given args and returns its
 -- output, exit status etc
 local function command(cmd, ...)
 	local prearg = {...}
 	return function(...)
 		local args = flatten({...})
-		local s = cmd
+		local s = {}
 		for _, v in ipairs(prearg) do
-			s = s .. ' ' .. v
+      s[#s+1] = v
 		end
-		for k, v in pairs(args.args) do
-			s = s .. ' ' .. v
+		for _, v in pairs(args.args) do
+      s[#s+1] = v
 		end
 
-    local old_input = io.stdin
-		if args.input then
-			local f = io.open(M.tmpfile, 'w')
-			f:write(args.input)
-			f:close()
-      io.input(M.tmpfile)
-		end
-		local p = io.popen(s, 'r')
-		local output = p:read('*a')
-		local _, exit, status = p:close()
-		os.remove(M.tmpfile)
-    io.input(old_input)
+		local output, exit, status = pread(s, args.input)
 
 		local t = {
 			__input = output,
