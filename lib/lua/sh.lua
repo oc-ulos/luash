@@ -11,7 +11,7 @@
 --  - Add sh.expand() to perform glob expansion
 --  - Don't use io.popen()
 
-local sys = require("sys")
+local sys = require("syscalls")
 local errno = require("posix.errno").errno
 local stdio = require("posix.stdio")
 local dirent = require("posix.dirent")
@@ -159,14 +159,18 @@ function M.split(str)
   return tokens
 end
 
-local environ = require("sys").environ()
+local environ = sys.environ()
 function M.resolve(path)
   local PATH = environ.PATH or "/bin:/sbin:/usr/bin"
   for search in PATH:gmatch("[^:]+") do
-    local test = search .. "/" .. path
-    local stat = sys.stat(test)
-    if stat and bit32.band(stat, 0x8000) == 0 then
+    local test  = search .. "/" .. path
+    local test2 = search .. "/" .. path .. ".lua"
+    local stat  = sys.stat(test)
+    local stat2 = sys.stat(test2)
+    if stat and bit32.band(stat.mode, 0x8000) ~= 0 then
       return test
+    elseif stat2 and bit32.band(stat2.mode, 0x8000) ~= 0 then
+      return test2
     end
   end
   return nil, "command not found"
