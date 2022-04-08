@@ -65,14 +65,16 @@ local function pread(cmd, inp)
     local inst, oust = sys.pipe()
 
     pid, err = sys.fork(function()
-      io.stdout(stdio.fdopen(outfd))
+      sys.dup2(0, inst)
+      sys.dup2(1, outfd)
       sys.execve(cmd[1], table.pack(table.unpack(cmd, 2)))
     end)
 
     sys.write(oust, inp)
+    sys.close(oust)
   else
     pid, err = sys.fork(function()
-      io.stdout(stdio.fdopen(outfd))
+      sys.dup2(1, outfd)
       sys.execve(cmd[1], table.pack(table.unpack(cmd, 2)))
     end)
   end
