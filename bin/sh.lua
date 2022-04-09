@@ -11,7 +11,8 @@ local args, opts = require("getopt").getopt({
 }, argv)
 
 local cmdline = {[0] = "luash", "-i", "-l", "sh",
-  "-e", "setmetatable(_G, getmetatable(sh))"}
+  "-e", "setmetatable(_G, getmetatable(sh))",
+  "-e", "loadfile('/etc/luash_builtins.lua', '=builtins', nil, _G)()"}
 if opts.c and opts.c ~= argv[0] then
   table.insert(cmdline, "-e")
   table.insert(cmdline, "dofile('"..opts.c.."')")

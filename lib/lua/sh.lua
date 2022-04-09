@@ -63,16 +63,17 @@ local function pread(cmd, inp)
 
   cmd[0] = M.resolve(cmd[0])
 
+  if not cmd[0] then
+    io.stderr:write("command not found\n")
+    return nil, "exit", 127
+  end
+
   if inp and #inp > 0 then
     local inst, oust = sys.pipe()
 
     pid, err = sys.fork(function()
-      assert(sys.dup2(0, inst))
-      assert(sys.dup2(1, outfd))
-      sys.close(inst)
-      sys.close(oust)
-      sys.close(infd)
-      sys.close(outfd)
+      assert(sys.dup2(inst, 0))
+      assert(sys.dup2(outfd, 1))
       assert(sys.execve(cmd[0], cmd))--table.pack(table.unpack(cmd, 1)))
     end)
 
@@ -80,12 +81,10 @@ local function pread(cmd, inp)
     sys.close(oust)
   else
     pid, err = sys.fork(function()
-      assert(sys.dup2(1, outfd))
-      sys.close(infd)
-      sys.close(outfd)
+      assert(sys.dup2(outfd, 1))
       assert(sys.execve(cmd[0], cmd))--table.pack(table.unpack(cmd, 1)))
     end)
-    sys.close(outfd)
+    --sys.close(outfd)
   end
 
   if not pid then
@@ -94,6 +93,7 @@ local function pread(cmd, inp)
 
   local exit, status = sys.wait(pid)
   local output = sys.read(infd, "a")
+  sys.close(infd)
 
   return output, exit, status
 end
@@ -115,10 +115,11 @@ local function command(cmd, ...)
 		local output, exit, status = pread(s, args.input)
 
 		local t = {
-			__input = output,
+			__input = output or "",
 			__exitcode = exit == 'exit' and status or 127,
 			__signal = exit == 'signal' and status or 0,
 		}
+
 		local mt = {
 			__index = function(_, k)
 				return _G[k] or M[k]
@@ -141,7 +142,7 @@ setmetatable(M, {
 	__call = function(_, cmd, ...)
 		return command(cmd, ...)
 	end, __index = function(_, cmd)
-    return command(cmd)
+    return rawget(M, cmd) or command(cmd)
   end
 })
 
