@@ -61,22 +61,31 @@ local function pread(cmd, inp)
   local pid, err
   local infd, outfd = sys.pipe()
 
-  if inp then
+  cmd[0] = M.resolve(cmd[0])
+
+  if inp and #inp > 0 then
     local inst, oust = sys.pipe()
 
     pid, err = sys.fork(function()
-      sys.dup2(0, inst)
-      sys.dup2(1, outfd)
-      sys.execve(cmd[1], table.pack(table.unpack(cmd, 2)))
+      assert(sys.dup2(0, inst))
+      assert(sys.dup2(1, outfd))
+      sys.close(inst)
+      sys.close(oust)
+      sys.close(infd)
+      sys.close(outfd)
+      assert(sys.execve(cmd[0], cmd))--table.pack(table.unpack(cmd, 1)))
     end)
 
     sys.write(oust, inp)
     sys.close(oust)
   else
     pid, err = sys.fork(function()
-      sys.dup2(1, outfd)
-      sys.execve(cmd[1], table.pack(table.unpack(cmd, 2)))
+      assert(sys.dup2(1, outfd))
+      sys.close(infd)
+      sys.close(outfd)
+      assert(sys.execve(cmd[0], cmd))--table.pack(table.unpack(cmd, 1)))
     end)
+    sys.close(outfd)
   end
 
   if not pid then
@@ -84,8 +93,8 @@ local function pread(cmd, inp)
   end
 
   local exit, status = sys.wait(pid)
-
   local output = sys.read(infd, "a")
+
   return output, exit, status
 end
 
@@ -95,7 +104,7 @@ local function command(cmd, ...)
 	local prearg = {...}
 	return function(...)
 		local args = flatten({...})
-		local s = {}
+		local s = {[0]=cmd}
 		for _, v in ipairs(prearg) do
       s[#s+1] = v
 		end
