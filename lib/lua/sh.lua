@@ -61,9 +61,9 @@ local function pread(cmd, inp)
   local pid, err
   local infd, outfd = sys.pipe()
 
-  cmd[0] = M.resolve(cmd[0])
+  local file = M.resolve(cmd[0])
 
-  if not cmd[0] then
+  if not file then
     io.stderr:write("command not found\n")
     return nil, "exit", 127
   end
@@ -74,7 +74,7 @@ local function pread(cmd, inp)
     pid, err = sys.fork(function()
       assert(sys.dup2(inst, 0))
       assert(sys.dup2(outfd, 1))
-      assert(sys.execve(cmd[0], cmd))--table.pack(table.unpack(cmd, 1)))
+      assert(sys.execve(file, cmd))--table.pack(table.unpack(cmd, 1)))
     end)
 
     sys.write(oust, inp)
@@ -82,7 +82,7 @@ local function pread(cmd, inp)
   else
     pid, err = sys.fork(function()
       assert(sys.dup2(outfd, 1))
-      assert(sys.execve(cmd[0], cmd))--table.pack(table.unpack(cmd, 1)))
+      assert(sys.execve(file, cmd))--table.pack(table.unpack(cmd, 1)))
     end)
     --sys.close(outfd)
   end
