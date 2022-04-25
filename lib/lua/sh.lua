@@ -59,22 +59,27 @@ end
 
 local function pread(cmd, inp)
   local pid, err
-  local infd, outfd = sys.pipe()
-
   local file = M.resolve(cmd[0])
 
   if not file then
     io.stderr:write("command not found\n")
     return nil, "exit", 127
   end
+  local infd, outfd = sys.pipe()
+  local inst, oust
 
   if inp and #inp > 0 then
-    local inst, oust = sys.pipe()
+    inst, oust = sys.pipe()
 
     pid, err = sys.fork(function()
       assert(sys.dup2(inst, 0))
       assert(sys.dup2(outfd, 1))
-      assert(sys.execve(file, cmd))--table.pack(table.unpack(cmd, 1)))
+      sys.close(inst)
+      sys.close(oust)
+      sys.close(infd)
+      sys.close(outfd)
+      local _, _err = sys.execve(file, cmd)
+      os.exit(_err)
     end)
 
     sys.write(oust, inp)
@@ -82,18 +87,25 @@ local function pread(cmd, inp)
   else
     pid, err = sys.fork(function()
       assert(sys.dup2(outfd, 1))
-      assert(sys.execve(file, cmd))--table.pack(table.unpack(cmd, 1)))
+      sys.close(infd)
+      sys.close(outfd)
+      local _, _err = sys.execve(file, cmd)
+      os.exit(_err)
     end)
-    --sys.close(outfd)
   end
 
   if not pid then
+    sys.close(infd)
+    sys.close(outfd)
+    if inst then sys.close(inst) end
     error(errno(err))
   end
 
   local exit, status = sys.wait(pid)
   local output = sys.read(infd, "a")
   sys.close(infd)
+  sys.close(outfd)
+  if inst then sys.close(inst) end
 
   return output, exit, status
 end
