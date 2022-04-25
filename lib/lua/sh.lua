@@ -173,6 +173,13 @@ end
 
 local environ = sys.environ()
 function M.resolve(path)
+  if path:find("/") then
+    local stat = sys.stat(path)
+    if stat and bit32.band(stat.mode, 0x8000) ~= 0 then
+      return path
+    end
+  end
+
   local PATH = environ.PATH or "/bin:/sbin:/usr/bin"
   for search in PATH:gmatch("[^:]+") do
     local test  = search .. "/" .. path
